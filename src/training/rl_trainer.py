@@ -145,7 +145,6 @@ class RLTrainer:
                     break
 
             # --- Compute advantages ---
-            with_no_grad = True
             last_value = 0.0
             if not done:
                 _, _, last_value = agent.act(obs)

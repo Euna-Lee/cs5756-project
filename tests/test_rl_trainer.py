@@ -130,8 +130,8 @@ class TestRLTrainer:
         env_fn = lambda: MockBattleEnv(max_steps=5)
         trainer = RLTrainer(env_fn=env_fn, config=rl_cfg)
         history = trainer.train()
-        # At least 8 updates should have occurred (64 steps / 8 per rollout)
-        assert trainer.agent._total_steps == 0 or True  # Just check no error
+        # Verify training completed without raising an exception
+        assert isinstance(history, list)
 
     def test_history_contains_expected_keys(self, tmp_path):
         """When episodes complete, history entries have the expected keys."""
