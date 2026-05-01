@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project artifacts (demos, checkpoints, experiment logs)
+data/
+runs/
+wandb/
+
+# macOS
+.DS_Store

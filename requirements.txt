@@ -1,0 +1,9 @@
+# Install the package in editable mode (recommended; deps come from pyproject.toml):
+#   pip install -U pip
+#   pip install -e .
+#
+# Or install third-party libs only and use PYTHONPATH=src:
+#   pip install -U pip
+#   pip install poke-env torch numpy pandas pyyaml tqdm tensorboard matplotlib seaborn
+
+-e .

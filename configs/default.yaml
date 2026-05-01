@@ -1,0 +1,9 @@
+# Default experiment / smoke-test settings (override via CLI or another YAML).
+
+# Week 1 default: BSS Factory = bring 6, battle with 3 (often used as "3v3 random").
+# Long-horizon baseline you may also use later: gen9randombattle (full 6v6).
+battle_format: gen9bssfactory
+n_battles: 1
+max_concurrent_battles: 1
+
+# Local Showdown: start with `node pokemon-showdown start --no-security` (default poke-env URL).
