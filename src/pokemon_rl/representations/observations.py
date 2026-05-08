@@ -81,15 +81,19 @@ def _moves_to_json(moves: Any) -> list[dict[str, Any]]:
         return []
     out: list[dict[str, Any]] = []
     for m in list(moves)[:4]:
+        # poke-env Move fields are backed by Showdown move entries.
+        # Some entries may miss optional keys (e.g. "priority"),
+        # and the corresponding @property can raise KeyError.
+        # We catch all errors to keep logging robust.
         out.append(
             {
-                "id": getattr(m, "id", None),
-                "name": getattr(m, "name", None),
-                "type": _stringify(getattr(m, "type", None)),
-                "base_power": getattr(m, "base_power", None),
-                "accuracy": getattr(m, "accuracy", None),
-                "priority": getattr(m, "priority", None),
-                "current_pp": getattr(m, "current_pp", None),
+                "id": _safe_attr(m, "id"),
+                "name": _safe_attr(m, "name"),
+                "type": _stringify(_safe_attr(m, "type")),
+                "base_power": _safe_attr(m, "base_power"),
+                "accuracy": _safe_attr(m, "accuracy"),
+                "priority": _safe_attr(m, "priority"),
+                "current_pp": _safe_attr(m, "current_pp"),
             }
         )
     return out
@@ -126,4 +130,11 @@ def _stringify(x: Any) -> Any:
     if isinstance(x, (str, int, float, bool)):
         return x
     return str(x)
+
+
+def _safe_attr(obj: Any, attr: str) -> Any:
+    try:
+        return getattr(obj, attr, None)
+    except Exception:
+        return None
 

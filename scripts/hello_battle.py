@@ -10,6 +10,11 @@ from pathlib import Path
 
 from poke_env.player import RandomPlayer
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SRC = _REPO_ROOT / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 from pokemon_rl.utils.config import load_yaml
 
 

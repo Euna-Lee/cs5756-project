@@ -53,6 +53,25 @@ def legal_action_mask(battle: Any) -> list[int]:
     return mask
 
 
+def action_id_to_order(player: Any, battle: Any, action_id: int):
+    """
+    Convert an action_id into a poke-env BattleOrder using `player.create_order`.
+
+    This uses the *current* battle state's `available_moves` / `available_switches`.
+    If the action is illegal, falls back to `player.choose_random_move(battle)`.
+    """
+    da = decode_action(action_id)
+    if da.kind == "move":
+        moves: Sequence[Any] = getattr(battle, "available_moves", ()) or ()
+        if da.index < len(moves):
+            return player.create_order(moves[da.index])
+        return player.choose_random_move(battle)
+    switches: Sequence[Any] = getattr(battle, "available_switches", ()) or ()
+    if da.index < len(switches):
+        return player.create_order(switches[da.index])
+    return player.choose_random_move(battle)
+
+
 def action_id_to_semantic(
     battle: Any,
     action_id: int,
@@ -74,12 +93,12 @@ def action_id_to_semantic(
             "kind": "move",
             "index": da.index,
             "available": True,
-            "id": getattr(m, "id", None),
-            "name": getattr(m, "name", None),
-            "type": str(getattr(m, "type", None)),
-            "base_power": getattr(m, "base_power", None),
-            "accuracy": getattr(m, "accuracy", None),
-            "priority": getattr(m, "priority", None),
+            "id": _safe_attr(m, "id"),
+            "name": _safe_attr(m, "name"),
+            "type": str(_safe_attr(m, "type")),
+            "base_power": _safe_attr(m, "base_power"),
+            "accuracy": _safe_attr(m, "accuracy"),
+            "priority": _safe_attr(m, "priority"),
         }
 
     switches: Sequence[Any] = getattr(battle, "available_switches", ()) or ()
@@ -90,8 +109,15 @@ def action_id_to_semantic(
         "kind": "switch",
         "index": da.index,
         "available": True,
-        "species": getattr(p, "species", None),
-        "current_hp_fraction": getattr(p, "current_hp_fraction", None),
-        "status": str(getattr(p, "status", None)),
+        "species": _safe_attr(p, "species"),
+        "current_hp_fraction": _safe_attr(p, "current_hp_fraction"),
+        "status": str(_safe_attr(p, "status")),
     }
+
+
+def _safe_attr(obj: Any, attr: str) -> Any:
+    try:
+        return getattr(obj, attr, None)
+    except Exception:
+        return None
 
