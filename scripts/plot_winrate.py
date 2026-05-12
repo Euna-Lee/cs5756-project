@@ -35,13 +35,28 @@ def main() -> None:
     if not rows:
         raise SystemExit("No eval records found.")
 
-    fields = ["ts", "format", "checkpoint", "n_battles", "finished", "wins", "win_rate"]
+    fields = [
+        "ts",
+        "format",
+        "checkpoint",
+        "random_policy",
+        "opponent",
+        "seed",
+        "git_commit",
+        "n_battles",
+        "finished",
+        "wins",
+        "win_rate",
+    ]
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.out_csv.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields)
+        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
         for r in rows:
-            w.writerow({k: r.get(k) for k in fields})
+            meta = r.get("run_metadata") or {}
+            row = {k: r.get(k) for k in fields if k != "git_commit"}
+            row["git_commit"] = meta.get("git_commit")
+            w.writerow(row)
 
     print(f"Wrote {len(rows)} rows to {args.out_csv}")
 

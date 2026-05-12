@@ -23,6 +23,7 @@ if str(_SRC) not in sys.path:
 from pokemon_rl.data import JsonlStepDataset, find_step_logs
 from pokemon_rl.models import MaskedPolicyNet
 from pokemon_rl.representations import ACTION_SPACE_SIZE
+from pokemon_rl.utils.run_metadata import common_run_metadata, save_run_manifest
 
 
 def _collate_step_examples(batch):
@@ -45,6 +46,17 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--hidden", type=int, default=128)
     p.add_argument("--val-frac", type=float, default=0.1)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    p.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="Directory name under --runs-dir (default: bc-<format>-<timestamp>). Use for reproducible Week 3 sweeps.",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow writing into an existing --run-name directory (default: refuse if run_manifest.json exists).",
+    )
     return p.parse_args()
 
 
@@ -70,15 +82,69 @@ def main() -> None:
     )
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, collate_fn=_collate_step_examples)
 
-    run_id = f"bc-{args.format}-{int(time.time())}"
+    run_id = args.run_name if args.run_name else f"bc-{args.format}-{int(time.time())}"
     run_dir = args.runs_dir / run_id
+    if run_dir.exists() and (run_dir / "run_manifest.json").exists() and not args.force:
+        raise SystemExit(
+            f"Run directory already exists: {run_dir}\n"
+            "Use a new --run-name or pass --force to overwrite (not recommended)."
+        )
     run_dir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_dir=str(run_dir / "tb"))
 
     model = MaskedPolicyNet(obs_dim=obs_dim, hidden=args.hidden).to(args.device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
+    demo_paths: list[str] = []
+    for p in jsonl_paths:
+        try:
+            demo_paths.append(str(p.relative_to(_REPO_ROOT)))
+        except ValueError:
+            demo_paths.append(str(p))
+
+    def save_ckpt(epoch: int, *, final_val_acc: float | None = None, final_val_loss: float | None = None) -> None:
+        meta = common_run_metadata(
+            "train_bc.py",
+            _REPO_ROOT,
+            seed=args.seed,
+            extra={
+                "run_id": run_id,
+                "format": args.format,
+                "epochs": args.epochs,
+                "epoch_saved": epoch,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "hidden": args.hidden,
+                "val_frac": args.val_frac,
+                "device": args.device,
+                "demos_root": str(args.demos_root),
+                "n_demo_files": len(jsonl_paths),
+                "demo_files_sample": demo_paths[:30],
+                "n_train_examples": n_train,
+                "n_val_examples": n_val,
+                "final_val_acc": final_val_acc,
+                "final_val_loss": final_val_loss,
+            },
+        )
+        ckpt_path = run_dir / f"policy_epoch{epoch}.pt"
+        torch.save(
+            {
+                "format": args.format,
+                "obs_dim": obs_dim,
+                "action_space_size": ACTION_SPACE_SIZE,
+                "model_state_dict": model.state_dict(),
+                "hidden": args.hidden,
+                "run_metadata": meta,
+            },
+            ckpt_path,
+        )
+
+    # Week 2 exit check: untrained init (same as random policy structure, not uniform-legal baseline)
+    save_ckpt(0)
+
     global_step = 0
+    last_val_acc = 0.0
+    last_val_loss = 0.0
     for epoch in range(args.epochs):
         model.train()
         for x, a, m in train_loader:
@@ -115,22 +181,41 @@ def main() -> None:
 
         val_loss /= max(1, total)
         acc = correct / max(1, total)
+        last_val_loss = val_loss
+        last_val_acc = acc
         writer.add_scalar("val/loss", val_loss, epoch)
         writer.add_scalar("val/acc", acc, epoch)
         print(f"epoch {epoch+1}/{args.epochs} val_loss={val_loss:.4f} val_acc={acc:.3f}")
 
-        ckpt_path = run_dir / f"policy_epoch{epoch+1}.pt"
-        torch.save(
-            {
-                "format": args.format,
-                "obs_dim": obs_dim,
-                "action_space_size": ACTION_SPACE_SIZE,
-                "model_state_dict": model.state_dict(),
-                "hidden": args.hidden,
-            },
-            ckpt_path,
-        )
+        save_ckpt(epoch + 1, final_val_acc=acc, final_val_loss=val_loss)
 
+    save_run_manifest(
+        run_dir / "run_manifest.json",
+        common_run_metadata(
+            "train_bc.py",
+            _REPO_ROOT,
+            seed=args.seed,
+            extra={
+                "run_id": run_id,
+                "run_dir": str(run_dir),
+                "format": args.format,
+                "epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "hidden": args.hidden,
+                "val_frac": args.val_frac,
+                "device": args.device,
+                "demos_root": str(args.demos_root),
+                "n_demo_files": len(jsonl_paths),
+                "demo_files": demo_paths,
+                "n_train_examples": n_train,
+                "n_val_examples": n_val,
+                "final_val_acc": last_val_acc,
+                "final_val_loss": last_val_loss,
+                "checkpoints": [f"policy_epoch{i}.pt" for i in range(args.epochs + 1)],
+            },
+        ),
+    )
     print(f"Saved checkpoints under: {run_dir}")
     writer.close()
 
